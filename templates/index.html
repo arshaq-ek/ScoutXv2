@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-CAM Control</title>
+</head>
+<body>
+    <h1>ESP32-CAM Control</h1>
+    <img src="http://192.168.1.8/mjpeg/1" alt="Video Stream" width="640" height="480">
+    <br>
+    <form action="/send_command" method="post">
+        <button name="command" value="FORWARD">Forward</button>
+        <button name="command" value="BACKWARD">Backward</button>
+        <button name="command" value="LEFT">Left</button>
+        <button name="command" value="RIGHT">Right</button>
+        <button name="command" value="OPEN">Open</button>
+        <button name="command" value="CLOSE">Close</button>
+    </form>
+</body>
+</html>
