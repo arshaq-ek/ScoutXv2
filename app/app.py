@@ -124,7 +124,6 @@ def update_video():
         try:
             r = requests.get(stream_url, stream=True, timeout=5)
             bytes_data = bytes()
-            frame_count = 0
 
             for chunk in r.iter_content(chunk_size=1024):
                 bytes_data += chunk
@@ -142,37 +141,36 @@ def update_video():
                     # Resize frame for faster processing
                     small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
-                    # Perform face recognition every 5 frames
-                    if frame_count % 5 == 0 and face_recognition_active:
-                        # Convert frame to grayscale for Haar cascade
-                        gray_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
-                        faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5)
+                    # Convert frame to grayscale for Haar cascade
+                    gray_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
 
-                        if len(faces) > 0:
-                            # Convert frame to RGB for face recognition
-                            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                    # Detect faces using Haar cascade
+                    faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5)
 
-                            # Find face encodings
-                            face_encodings = face_recognition.face_encodings(rgb_small_frame)
+                    if len(faces) > 0 and face_recognition_active:
+                        # Convert frame to RGB for face recognition
+                        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-                            # Check for recognized faces
-                            recognized = False
-                            for encoding in face_encodings:
-                                matches = face_recognition.compare_faces(encodelist_known, encoding)
-                                face_distances = face_recognition.face_distance(encodelist_known, encoding)
+                        # Find face encodings
+                        face_encodings = face_recognition.face_encodings(rgb_small_frame)
 
-                                if len(face_distances) > 0:
-                                    best_match_index = np.argmin(face_distances)
-                                    if matches[best_match_index]:
-                                        recognized = True
-                                        break
+                        # Check for recognized faces
+                        recognized = False
+                        for encoding in face_encodings:
+                            matches = face_recognition.compare_faces(encodelist_known, encoding)
+                            face_distances = face_recognition.face_distance(encodelist_known, encoding)
 
-                            if recognized:
-                                send_command("TRUE")
+                            if len(face_distances) > 0:
+                                best_match_index = np.argmin(face_distances)
+                                if matches[best_match_index]:
+                                    recognized = True
+                                    break
+
+                        if recognized:
+                            send_command("TRUE")
 
                     # Update the latest frame
                     latest_frame = frame.copy()
-                    frame_count += 1
 
                     # Display video in GUI
                     display_frame = cv2.resize(frame, (640, 480))
