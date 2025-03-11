@@ -8,6 +8,16 @@ from ttkthemes import ThemedTk
 import face_recognition
 import numpy as np
 import os
+import requests
+import serial
+
+# --- Bluetooth Setup ---
+try:
+    ser = serial.Serial("COM7", 9600, timeout=1)
+    print("Bluetooth serial connection established.")
+except Exception as e:
+    print("Bluetooth Serial Error:", e)
+    ser = None
 
 # --- Known Face Recognition Setup ---
 known_faces_path = r"C:\Users\arsha\OneDrive\Desktop\bot\images"
@@ -53,28 +63,52 @@ video_label.pack()
 status_label = Label(root, text="Status: Idle", bd=1, relief=tk.SUNKEN, anchor=tk.W, font=("Helvetica", 10), bg="#34495e", fg="white")
 status_label.pack(side=tk.BOTTOM, fill=tk.X)
 
-# Buttons for commands
+# Function to send commands
 def send_command(command):
+    if ser is not None:
+        try:
+            ser.write((command + "\n").encode('utf-8'))
+        except Exception as e:
+            print("Error sending command:", e)
     print(f"Command sent: {command}")
     status_label.config(text=f"Status: {command}")
 
+# Function to stop motors when button is released
+def stop_motors(event=None):
+    send_command("S")
+
+# Buttons for commands
 button_frame = Frame(root, bg="#2c3e50")
 button_frame.pack(pady=10)
 
-forward_button = ttk.Button(button_frame, text="Forward", command=lambda: send_command("Forward"))
-forward_button.grid(row=0, column=1, padx=5, pady=5)
+btn_up = ttk.Button(button_frame, text="↑ Forward", width=10)
+btn_down = ttk.Button(button_frame, text="↓ Backward", width=10)
+btn_left = ttk.Button(button_frame, text="← Left", width=10)
+btn_right = ttk.Button(button_frame, text="→ Right", width=10)
+btn_stop = ttk.Button(button_frame, text="■ Stop", width=10, command=stop_motors)
 
-backward_button = ttk.Button(button_frame, text="Backward", command=lambda: send_command("Backward"))
-backward_button.grid(row=2, column=1, padx=5, pady=5)
+# Bind button press and release events
+btn_up.bind("<ButtonPress>", lambda event: send_command("F"))
+btn_up.bind("<ButtonRelease>", stop_motors)
 
-left_button = ttk.Button(button_frame, text="Left", command=lambda: send_command("Left"))
-left_button.grid(row=1, column=0, padx=5, pady=5)
+btn_down.bind("<ButtonPress>", lambda event: send_command("B"))
+btn_down.bind("<ButtonRelease>", stop_motors)
 
-right_button = ttk.Button(button_frame, text="Right", command=lambda: send_command("Right"))
-right_button.grid(row=1, column=2, padx=5, pady=5)
+btn_left.bind("<ButtonPress>", lambda event: send_command("L"))
+btn_left.bind("<ButtonRelease>", stop_motors)
 
-stop_button = ttk.Button(button_frame, text="Stop", command=lambda: send_command("Stop"))
-stop_button.grid(row=1, column=1, padx=5, pady=5)
+btn_right.bind("<ButtonPress>", lambda event: send_command("R"))
+btn_right.bind("<ButtonRelease>", stop_motors)
+
+# Grid layout for buttons
+btn_up.grid(row=0, column=1, padx=5, pady=5)
+btn_left.grid(row=1, column=0, padx=5, pady=5)
+btn_stop.grid(row=1, column=1, padx=5, pady=5)
+btn_right.grid(row=1, column=2, padx=5, pady=5)
+btn_down.grid(row=2, column=1, padx=5, pady=5)
+
+# ESP32-CAM stream URL
+stream_url = "http://192.168.4.1/stream"
 
 # Global variables for video processing
 latest_frame = None
@@ -83,59 +117,67 @@ face_recognition_active = True
 # Function to process video stream and perform face recognition
 def update_video():
     global latest_frame, face_recognition_active
-    cap = cv2.VideoCapture(0)  # Use webcam instead of IP cam
-    if not cap.isOpened():
-        print("Error: Could not open webcam.")
+    try:
+        r = requests.get(stream_url, stream=True, timeout=5)
+    except requests.exceptions.RequestException as e:
+        print("Error accessing video stream:", e)
         return
-
+    
+    bytes_data = bytes()
     frame_count = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Could not read frame.")
-            break
 
-        # Resize frame for faster processing
-        small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+    for chunk in r.iter_content(chunk_size=1024):
+        bytes_data += chunk
+        a = bytes_data.find(b'\xff\xd8')
+        b = bytes_data.find(b'\xff\xd9')
 
-        # Perform face recognition every 5 frames
-        if frame_count % 5 == 0 and face_recognition_active:
-            # Convert frame to RGB for face recognition
-            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        if a != -1 and b != -1:
+            jpg = bytes_data[a:b+2]
+            bytes_data = bytes_data[b+2:]
+            frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
 
-            # Find face locations and encodings
-            face_locations = face_recognition.face_locations(rgb_small_frame)
-            face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+            if frame is None:
+                continue
 
-            # Check for recognized faces
-            recognized = False
-            for encoding in face_encodings:
-                matches = face_recognition.compare_faces(encodelist_known, encoding)
-                face_distances = face_recognition.face_distance(encodelist_known, encoding)
+            # Resize frame for faster processing
+            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
-                if len(face_distances) > 0:
-                    best_match_index = np.argmin(face_distances)
-                    if matches[best_match_index]:
-                        name = classnames[best_match_index].upper()
-                        recognized = True
-                        print(f"Face recognized: {name}")
-                        send_command(f"Face Recognized: {name}")
-                        break
+            # Perform face recognition every 5 frames
+            if frame_count % 5 == 0 and face_recognition_active:
+                # Convert frame to RGB for face recognition
+                rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-        # Update the latest frame
-        latest_frame = frame.copy()
-        frame_count += 1
+                # Find face locations and encodings
+                face_locations = face_recognition.face_locations(rgb_small_frame)
+                face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
-        # Display video in GUI
-        display_frame = cv2.resize(frame, (640, 480))
-        img = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)))
-        video_label.imgtk = img
-        video_label.configure(image=img)
+                # Check for recognized faces
+                recognized = False
+                for encoding in face_encodings:
+                    matches = face_recognition.compare_faces(encodelist_known, encoding)
+                    face_distances = face_recognition.face_distance(encodelist_known, encoding)
 
-        # Sleep to reduce CPU usage
-        time.sleep(0.03)
+                    if len(face_distances) > 0:
+                        best_match_index = np.argmin(face_distances)
+                        if matches[best_match_index]:
+                            recognized = True
+                            break
 
-    cap.release()
+                if recognized:
+                    send_command("T")
+
+            # Update the latest frame
+            latest_frame = frame.copy()
+            frame_count += 1
+
+            # Display video in GUI
+            display_frame = cv2.resize(frame, (640, 480))
+            img = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)))
+            video_label.imgtk = img
+            video_label.configure(image=img)
+
+            # Sleep to reduce CPU usage
+            time.sleep(0.03)
 
 # Start video processing in a separate thread
 video_thread = threading.Thread(target=update_video, daemon=True)
@@ -144,6 +186,8 @@ video_thread.start()
 def on_closing():
     global face_recognition_active
     face_recognition_active = False  # Stop face recognition
+    if ser is not None:
+        ser.close()
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_closing)

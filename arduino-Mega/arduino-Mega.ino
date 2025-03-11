@@ -1,4 +1,3 @@
-
 #include <Servo.h>
 
 const int leftMotorPWM = 9;
@@ -33,11 +32,17 @@ void setup() {
 
 void loop() {
     if (Serial1.available()) {  
-        char command = Serial1.read();
+        String command = Serial1.readString();
+        command.trim();
+        
         Serial.print("Received: ");
         Serial.println(command);
         
-        controlMotors(command);
+        if (command == "T") {  // Face detected
+            packageDeliverySequence();
+        } else {
+            controlMotors(command[0]);
+        }
     }
 
     if (Serial.available()) {
@@ -46,6 +51,21 @@ void loop() {
         Serial.print("Sent to Laptop: ");
         Serial.println(userMessage);
     }
+}
+
+void packageDeliverySequence() {
+    Serial.println("Face Recognised. Starting package delivery...");
+
+    openServo();  
+    delay(500);  
+
+    Serial.println("Please take the package in 10 seconds.");
+    delay(10000); // Wait 10 seconds
+
+    closeServo();
+    delay(500);
+
+    Serial.println("Package Delivered. Bye.");
 }
 
 void controlMotors(char command) {
