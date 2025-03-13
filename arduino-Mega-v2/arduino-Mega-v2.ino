@@ -1,5 +1,4 @@
 #include <Servo.h>
-#include "DFRobotDFPlayerMini.h"
 
 const int leftMotorPWM = 9;
 const int leftMotorDir1 = 8;
@@ -12,17 +11,11 @@ const int rightMotorDir2 = 5;
 const int servoPin = 11;
 const int motorSpeed = 95;
 
-// DFPlayer Mini Serial (Using Serial2 on Mega)
-#define DFPLAYER_RX 16  // DFPlayer TX -> Mega RX2
-#define DFPLAYER_TX 17  // DFPlayer RX -> Mega TX2 (Use 1kΩ Resistor)
-DFRobotDFPlayerMini myDFPlayer;
-
 Servo myServo;
 
 void setup() {
-    Serial.begin(9600);   // Serial Monitor (for debugging)
-    Serial1.begin(9600);  // Bluetooth module connected to Serial1 (TX1, RX1)
-    Serial2.begin(9600);  // DFPlayer Mini connected to Serial2 (TX2, RX2)
+    Serial.begin(9600);   // Debugging
+    Serial1.begin(9600);  // Bluetooth module
 
     pinMode(leftMotorPWM, OUTPUT);
     pinMode(leftMotorDir1, OUTPUT);
@@ -33,31 +26,17 @@ void setup() {
 
     myServo.attach(servoPin);
     myServo.write(0); // Default position
-    
-    Serial.println("Initializing DFPlayer Mini...");
-    if (!myDFPlayer.begin(Serial2)) {  
-        Serial.println("DFPlayer Mini not detected! Check wiring.");
-        while (true);  // Halt execution if DFPlayer is not found
-    }
-    
-    myDFPlayer.volume(20); // Set volume (0 to 30)
 
-    Serial.println("Bluetooth Module Ready. Waiting for messages...");
+    Serial.println("Bluetooth Ready. Waiting for commands...");
 }
 
 void loop() {
     if (Serial1.available()) {  
-        String command = Serial1.readString();
-        command.trim();
-        
+        char command = Serial1.read();  // Read ONE character at a time
         Serial.print("Received: ");
         Serial.println(command);
-        
-        if (command == "TRUE") {
-            packageDeliverySequence();
-        } else {
-            controlMotors(command[0]);
-        }
+
+        controlMotors(command);
     }
 
     if (Serial.available()) {
@@ -68,56 +47,21 @@ void loop() {
     }
 }
 
-void packageDeliverySequence() {
-    Serial.println("Face Recognised. Starting package delivery...");
-
-    myDFPlayer.play(4); // "Face Recognised"
-    delay(2000);  // Wait for audio to finish
-
-    openServo();  
-    delay(500);  
-
-    myDFPlayer.play(3); // "Please take the package in 10 seconds"
-    delay(10000); // Wait 10 seconds
-
-    closeServo();
-    delay(500);
-
-    myDFPlayer.play(2); // "Package Delivered"
-    delay(2000);  
-
-    myDFPlayer.play(1); // "Bye"
-    delay(2000);  
-
-    Serial.println("Package delivery sequence complete.");
-}
-
 void controlMotors(char command) {
+    if (command == 'S') {
+        stopMotors();
+        return; // Exit immediately to prevent other movements
+    }
+
     switch (command) {
-        case 'F':
-            moveForward();
-            break;
-        case 'B':
-            moveBackward();
-            break;
-        case 'L':
-            turnLeft();
-            break;
-        case 'R':
-            turnRight();
-            break;
-        case 'S':
-            stopMotors();
-            break;
-        case 'O':
-            openServo();
-            break;
-        case 'C':
-            closeServo();
-            break;
-        default:
-            Serial.println("Invalid command");
-            break;
+        case 'F': moveForward(); break;
+        case 'B': moveBackward(); break;
+        case 'L': turnLeft(); break;
+        case 'R': turnRight(); break;
+        case 'O': openServo(); break;
+        case 'C': closeServo(); break;
+        case 'T': packageDeliverySequence(); break;
+        default: Serial.println("Invalid command"); break;
     }
 }
 
@@ -176,15 +120,26 @@ void stopMotors() {
 }
 
 void openServo() {
-    if (myServo.read() != 90) {
-        myServo.write(90);
-        Serial.println("Servo Opened (90°)");
-    }
+    myServo.write(90);
+    Serial.println("Servo Opened (90°)");
 }
 
 void closeServo() {
-    if (myServo.read() != 0) {
-        myServo.write(0);
-        Serial.println("Servo Closed (0°)");
-    }
+    myServo.write(0);
+    Serial.println("Servo Closed (0°)");
+}
+
+void packageDeliverySequence() {
+    Serial.println("Face Recognised. Starting package delivery...");
+
+    openServo();  
+    delay(500);  
+
+    Serial.println("Please take the package in 10 seconds.");
+    delay(10000);
+
+    closeServo();
+    delay(500);
+
+    Serial.println("Package Delivered. Bye.");
 }

@@ -14,35 +14,29 @@ const int motorSpeed = 95;
 Servo myServo;
 
 void setup() {
-    Serial.begin(9600);   // Serial Monitor (for debugging)
-    Serial1.begin(9600);  // Bluetooth module connected to Serial1 (TX1, RX1)
-    
+    Serial.begin(9600);   // Debugging
+    Serial1.begin(9600);  // Bluetooth module
+
     pinMode(leftMotorPWM, OUTPUT);
     pinMode(leftMotorDir1, OUTPUT);
     pinMode(leftMotorDir2, OUTPUT);
     pinMode(rightMotorPWM, OUTPUT);
     pinMode(rightMotorDir1, OUTPUT);
     pinMode(rightMotorDir2, OUTPUT);
-    
+
     myServo.attach(servoPin);
     myServo.write(0); // Default position
-    
-    Serial.println("Bluetooth Module Ready. Waiting for messages...");
+
+    Serial.println("Bluetooth Ready. Waiting for commands...");
 }
 
 void loop() {
     if (Serial1.available()) {  
-        String command = Serial1.readString();
-        command.trim();
-        
+        char command = Serial1.read();  // Read ONE character at a time
         Serial.print("Received: ");
         Serial.println(command);
-        
-        if (command == "T") {  // Face detected
-            packageDeliverySequence();
-        } else {
-            controlMotors(command[0]);
-        }
+
+        controlMotors(command);
     }
 
     if (Serial.available()) {
@@ -53,47 +47,21 @@ void loop() {
     }
 }
 
-void packageDeliverySequence() {
-    Serial.println("Face Recognised. Starting package delivery...");
-
-    openServo();  
-    delay(500);  
-
-    Serial.println("Please take the package in 10 seconds.");
-    delay(10000); // Wait 10 seconds
-
-    closeServo();
-    delay(500);
-
-    Serial.println("Package Delivered. Bye.");
-}
-
 void controlMotors(char command) {
+    if (command == 'S') {
+        stopMotors();
+        return; // Exit immediately to prevent other movements
+    }
+
     switch (command) {
-        case 'F':
-            moveForward();
-            break;
-        case 'B':
-            moveBackward();
-            break;
-        case 'L':
-            turnLeft();
-            break;
-        case 'R':
-            turnRight();
-            break;
-        case 'S':
-            stopMotors();
-            break;
-        case 'O':
-            openServo();
-            break;
-        case 'C':
-            closeServo();
-            break;
-        default:
-            Serial.println("Invalid command");
-            break;
+        case 'F': moveForward(); break;
+        case 'B': moveBackward(); break;
+        case 'L': turnLeft(); break;
+        case 'R': turnRight(); break;
+        case 'O': openServo(); break;
+        case 'C': closeServo(); break;
+        case 'T': packageDeliverySequence(); break;
+        default: Serial.println("Invalid command"); break;
     }
 }
 
@@ -152,15 +120,26 @@ void stopMotors() {
 }
 
 void openServo() {
-    if (myServo.read() != 90) {
-        myServo.write(90);
-        Serial.println("Servo Opened (90°)");
-    }
+    myServo.write(90);
+    Serial.println("Servo Opened (90°)");
 }
 
 void closeServo() {
-    if (myServo.read() != 0) {
-        myServo.write(0);
-        Serial.println("Servo Closed (0°)");
-    }
+    myServo.write(0);
+    Serial.println("Servo Closed (0°)");
+}
+
+void packageDeliverySequence() {
+    Serial.println("Face Recognised. Starting package delivery...");
+
+    openServo();  
+    delay(500);  
+
+    Serial.println("Please take the package in 10 seconds.");
+    delay(10000);
+
+    closeServo();
+    delay(500);
+
+    Serial.println("Package Delivered. Bye.");
 }
